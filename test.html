@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPS Tracker ESP32 - Realtime</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; }
+    #map { height: 100vh; width: 100%; }
+    .info-box {
+      position: absolute; top: 12px; left: 12px; z-index: 1000;
+      background: rgba(255,255,255,0.95); padding: 12px 16px;
+      border-radius: 10px; box-shadow: 0 3px 12px rgba(0,0,0,0.25);
+      font-size: 14px; line-height: 1.6; min-width: 190px;
+    }
+    .info-box b { color: #1a73e8; }
+    .controls {
+      position: absolute; bottom: 20px; left: 12px; z-index: 1000;
+      display: flex; gap: 8px;
+    }
+    .controls button {
+      padding: 8px 14px; border: none; border-radius: 6px;
+      background: #1a73e8; color: white; font-weight: bold; cursor: pointer;
+    }
+    .controls button:hover { background: #0d5bcc; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="info-box">
+    <b>GPS Tracker ESP32</b><br>
+    Lat: <span id="lat">--</span><br>
+    Lon: <span id="lon">--</span><br>
+    Tốc độ: <span id="speed">--</span> km/h<br>
+    Vệ tinh: <span id="sats">--</span><br>
+    Trạng thái: <span id="status">Đang chờ dữ liệu...</span>
+  </div>
+  <div class="controls">
+    <button onclick="clearPath()">Xóa đường đi</button>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+  <script>
+    // ===== FIREBASE CONFIG =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyCLUxbdaJZ-7YRAEeq9rH59yx9-meAKF2c",
+      authDomain: "esp32-gps-tracker-dd68f.firebaseapp.com",
+      databaseURL: "https://esp32-gps-tracker-dd68f-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "esp32-gps-tracker-dd68f",
+      storageBucket: "esp32-gps-tracker-dd68f.firebasestorage.app",
+      messagingSenderId: "992622634185",
+      appId: "1:992622634185:web:d9c6ee1a408bb875f21918"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // ===== KHỞI TẠO BẢN ĐỒ =====
+    const map = L.map('map').setView([21.0285, 105.8542], 15);
+
+    // ✅ TILE LAYER ĐÃ SỬA — dùng CartoDB Positron (ổn định, không bị chặn)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }).addTo(map);
+
+    // Marker + đường đi
+    let marker = L.marker([21.0285, 105.8542]).addTo(map);
+    let pathCoords = [];
+    let polyline = L.polyline([], { color: '#1a73e8', weight: 5 }).addTo(map);
+
+    // ===== HÀM CẬP NHẬT VỊ TRÍ =====
+    function updatePosition(lat, lon, speed = 0, sats = 0) {
+      const pos = [lat, lon];
+      marker.setLatLng(pos);
+      marker.setPopupContent(
+        `Lat: ${lat.toFixed(6)}<br>` +
+        `Lon: ${lon.toFixed(6)}<br>` +
+        `Tốc độ: ${speed.toFixed(1)} km/h<br>` +
+        `Vệ tinh: ${sats}`
+      ).openPopup();
+
+      pathCoords.push(pos);
+      polyline.setLatLngs(pathCoords);
+      map.setView(pos, map.getZoom());
+
+      document.getElementById('lat').textContent = lat.toFixed(6);
+      document.getElementById('lon').textContent = lon.toFixed(6);
+      document.getElementById('speed').textContent = speed.toFixed(1);
+      document.getElementById('sats').textContent = sats;
+      document.getElementById('status').textContent = "Đang theo dõi (ESP32)";
+      document.getElementById('status').style.color = "green";
+    }
+
+    // ===== HÀM XÓA ĐƯỜNG ĐI =====
+    function clearPath() {
+      pathCoords = [];
+      polyline.setLatLngs([]);
+    }
+
+    // ===== LẮNG NGHE DỮ LIỆU REALTIME TỪ FIREBASE =====
+    db.ref('/gps').on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.lat && data.lon) {
+        updatePosition(data.lat, data.lon, data.speed || 0, data.sats || 0);
+      }
+    });
+  </script>
+</body>
+</html>
